@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Decisions Tracker</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        
+        h1 {
+            color: #333;
+            margin-top: 0;
+        }
+        
+        .form-area {
+            margin-bottom: 30px;
+        }
+        
+        .form-row {
+            margin-bottom: 15px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 5px;
+        }
+        
+        input[type="text"],
+        textarea {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+        }
+        
+        textarea {
+            min-height: 80px;
+        }
+        
+        button {
+            background: #4CAF50;
+            color: #fff;
+            border: 0;
+            padding: 10px 15px;
+            cursor: pointer;
+        }
+        
+        .decisions {
+            margin-top: 30px;
+        }
+        
+        .decision {
+            background: #fff;
+            padding: 15px;
+            margin-bottom: 15px;
+            border-left: 4px solid #FFC107;
+        }
+        
+        .decision.made {
+            border-left-color: #4CAF50;
+        }
+        
+        .decision h3 {
+            margin-top: 0;
+        }
+        
+        .meta {
+            color: #666;
+            font-size: 0.9em;
+        }
+        
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 100;
+        }
+        
+        .modal-content {
+            background: #fff;
+            margin: 50px auto;
+            padding: 20px;
+            width: 90%;
+            max-width: 600px;
+            border-radius: 5px;
+        }
+        
+        .close {
+            float: right;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>My Decision Tracker</h1>
+        
+        <div class="form-area">
+            <h2>Add New Decision</h2>
+            <form id="new-decision">
+                <div class="form-row">
+                    <label>What are you deciding about?</label>
+                    <input type="text" id="decision-name" required>
+                </div>
+                
+                <div class="form-row">
+                    <label>Good things about it (optional)</label>
+                    <textarea id="pros"></textarea>
+                </div>
+                
+                <div class="form-row">
+                    <label>Bad things about it (optional)</label>
+                    <textarea id="cons"></textarea>
+                </div>
+                
+                <div class="form-row">
+                    <label>
+                        <input type="checkbox" id="is-pending" checked> 
+                        Still deciding
+                    </label>
+                </div>
+                
+                <button type="submit">Save</button>
+            </form>
+        </div>
+        
+        <div class="decisions">
+            <h2>Your Decisions</h2>
+            <div id="decisions-list"></div>
+        </div>
+    </div>
+
+    <div id="decision-modal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h2 id="modal-title"></h2>
+            <p class="meta" id="modal-date"></p>
+            
+            <div id="modal-pros-cons">
+                <h4>Pros:</h4>
+                <ul id="pros-list"></ul>
+                
+                <h4>Cons:</h4>
+                <ul id="cons-list"></ul>
+            </div>
+            
+            <div id="outcome-form">
+                <h3>What did you decide?</h3>
+                <form id="save-outcome">
+                    <input type="hidden" id="modal-id">
+                    
+                    <div class="form-row">
+                        <input type="text" id="final-choice" placeholder="Your final decision" required>
+                    </div>
+                    
+                    <div class="form-row">
+                        <textarea id="reason" placeholder="Why you chose this" required></textarea>
+                    </div>
+                    
+                    <div class="form-row">
+                        <label>Was this the right choice?</label>
+                        <div>
+                            <label><input type="radio" name="verdict" value="good"> Yes</label>
+                            <label><input type="radio" name="verdict" value="bad"> No</label>
+                            <label><input type="radio" name="verdict" value="unsure"> Not sure</label>
+                        </div>
+                    </div>
+                    
+                    <button type="submit">Save Decision</button>
+                </form>
+            </div>
+            
+            <div id="outcome-display" style="display:none">
+                <h3>You decided:</h3>
+                <p><strong id="display-choice"></strong></p>
+                <p id="display-reason"></p>
+                <p id="display-verdict"></p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let decisions = JSON.parse(localStorage.getItem('decisions')) || [];
+        
+        document.getElementById('new-decision').addEventListener('submit', e => {
+            e.preventDefault();
+            
+            let decision = {
+                id: Date.now(),
+                title: document.getElementById('decision-name').value,
+                date: new Date().toISOString(),
+                pros: document.getElementById('pros').value.split('\n').filter(p => p.trim()),
+                cons: document.getElementById('cons').value.split('\n').filter(c => c.trim()),
+                pending: document.getElementById('is-pending').checked,
+                choice: '',
+                reason: '',
+                verdict: null
+            };
+            
+            decisions.unshift(decision);
+            localStorage.setItem('decisions', JSON.stringify(decisions));
+            renderDecisions();
+            e.target.reset();
+            document.getElementById('is-pending').checked = true;
+        });
+        
+        function renderDecisions() {
+            let listElement = document.getElementById('decisions-list');
+            
+            if (decisions.length === 0) {
+                listElement.innerHTML = '<p>No decisions yet. Add one above!</p>';
+                return;
+            }
+            
+            listElement.innerHTML = '';
+            
+            decisions.forEach(decision => {
+                let div = document.createElement('div');
+                div.className = `decision${decision.pending ? '' : ' made'}`;
+                div.innerHTML = `
+                    <h3>${decision.title}</h3>
+                    <p class="meta">${new Date(decision.date).toLocaleDateString()} • ${decision.pending ? 'Deciding' : 'Decided'}</p>
+                    ${!decision.pending ? `<p>Chose: ${decision.choice}</p>` : ''}
+                `;
+                
+                div.addEventListener('click', () => showModal(decision.id));
+                listElement.appendChild(div);
+            });
+        }
+        
+        function showModal(id) {
+            let decision = decisions.find(d => d.id === id);
+            if (!decision) return;
+            
+            document.getElementById('modal-title').textContent = decision.title;
+            document.getElementById('modal-date').textContent = new Date(decision.date).toLocaleDateString();
+            document.getElementById('pros-list').innerHTML = decision.pros.length > 0 
+                ? decision.pros.map(p => '<li>' + p + '</li>').join('') 
+                : '<li>None</li>';
+            document.getElementById('cons-list').innerHTML = decision.cons.length > 0 
+                ? decision.cons.map(c => '<li>' + c + '</li>').join('') 
+                : '<li>None</li>';
+            
+            let form = document.getElementById('outcome-form'),
+                display = document.getElementById('outcome-display');
+            
+            if (decision.pending) {
+                form.style.display = 'block';
+                display.style.display = 'none';
+                document.getElementById('modal-id').value = decision.id;
+                document.getElementById('final-choice').value = '';
+                document.getElementById('reason').value = '';
+                document.querySelectorAll('input[name="verdict"]').forEach(r => r.checked = false);
+            } else {
+                form.style.display = 'none';
+                display.style.display = 'block';
+                document.getElementById('display-choice').textContent = decision.choice;
+                document.getElementById('display-reason').textContent = decision.reason;
+                
+                let verdictText = '';
+                if (decision.verdict === 'good') verdictText = '✅ Good decision!';
+                else if (decision.verdict === 'bad') verdictText = '❌ Regretted decision';
+                else if (decision.verdict === 'unsure') verdictText = '🤷‍♂️ Not sure yet';
+                
+                document.getElementById('display-verdict').textContent = verdictText;
+            }
+            
+            document.getElementById('decision-modal').style.display = 'block';
+        }
+        
+        document.getElementById('save-outcome').addEventListener('submit', e => {
+            e.preventDefault();
+            
+            let id = parseInt(document.getElementById('modal-id').value),
+                decision = decisions.find(d => d.id === id);
+            
+            if (decision) {
+                decision.pending = false;
+                decision.choice = document.getElementById('final-choice').value;
+                decision.reason = document.getElementById('reason').value;
+                decision.verdict = document.querySelector('input[name="verdict"]:checked')?.value || null;
+                
+                localStorage.setItem('decisions', JSON.stringify(decisions));
+                renderDecisions();
+                showModal(id);
+            }
+        });
+        
+        document.querySelector('.close').addEventListener('click', () => {
+            document.getElementById('decision-modal').style.display = 'none';
+        });
+        
+        renderDecisions();
+    </script>
+</body>
+</html>
